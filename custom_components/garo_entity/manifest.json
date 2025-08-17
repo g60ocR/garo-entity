@@ -1,0 +1,13 @@
+{
+  "domain": "garo_entity",
+  "name": "Garo Entity",
+  "codeowners": ["@g60ocR"],
+  "config_flow": true,
+  "documentation": "https://github.com/g60ocR/garo-entity",
+  "icon": "mdi:ev-station",
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/g60ocR/garo-entity/issues",
+  "requirements": ["boto3>=1.26.0"],
+  "version": "1.0.0"
+}
