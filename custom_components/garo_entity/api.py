@@ -417,25 +417,39 @@ class GaroEntityAPI:
             # Convert value to string as API expects
             str_value = str(value).lower() if isinstance(value, bool) else str(value)
             
-            data = [
-                {
-                    "key": key,
-                    "value": str_value
-                }
-            ]
+            data = {
+                "configuration_variables": [
+                    {
+                        "key": key,
+                        "value": str_value
+                    }
+                ]
+            }
             
-            _LOGGER.debug("Sending PUT request with data: %s", data)
-            _LOGGER.debug("Request URL: PUT /charging-stations/%s/configuration", charging_station_id)
+            _LOGGER.debug("Sending PUT request to change-configuration endpoint")
             
-            response = await self._request("PUT", f"/charging-stations/{charging_station_id}/configuration", data=data)
+            response = await self._request("PUT", f"/actions/change-configuration/{charging_station_id}", data=data)
             
-            _LOGGER.info("Configuration update successful for %s %s=%s", charging_station_id, key, str_value)
-            _LOGGER.debug("Full configuration update response: %s", response)
+            # Check if the configuration change was accepted
+            if isinstance(response, dict) and "status" in response:
+                status_info = response["status"]
+                if isinstance(status_info, dict) and key in status_info:
+                    config_status = status_info[key]
+                    if config_status == "Accepted":
+                        _LOGGER.info("Configuration update accepted for %s %s=%s", charging_station_id, key, str_value)
+                    elif config_status == "Rejected":
+                        _LOGGER.error("Configuration update rejected for %s %s=%s", charging_station_id, key, str_value)
+                        raise Exception(f"Configuration change rejected by charging station: {key}={str_value}")
+                    else:
+                        _LOGGER.warning("Unknown configuration status '%s' for %s %s=%s", config_status, charging_station_id, key, str_value)
+                else:
+                    _LOGGER.warning("Configuration key '%s' not found in response status for station %s", key, charging_station_id)
+            else:
+                _LOGGER.warning("Unexpected response format for configuration change: missing 'status' field")
             
             return response
         except Exception as exc:
             _LOGGER.error("Failed to set configuration %s=%s for station %s: %s", key, value, charging_station_id, exc)
-            _LOGGER.error("Request data was: %s", {"key": key, "value": str(value).lower() if isinstance(value, bool) else str(value)})
             raise
 
     async def get_transactions(self, charging_station_id: str, connector_id: int = 1) -> dict[str, Any]:
