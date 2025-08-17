@@ -62,7 +62,7 @@ A comprehensive Home Assistant integration for Garo Entity charging stations, pr
 
 ### Manual Installation
 
-1. Download the latest release from the [GitHub repository](https://github.com/garo/garo-entity)
+1. Download the latest release from the [GitHub repository](https://github.com/g60ocR/garo-entity)
 2. Copy the `custom_components/garo_entity` folder to your Home Assistant `custom_components` directory
 3. Restart Home Assistant
 
