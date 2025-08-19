@@ -143,6 +143,7 @@ The integration includes comprehensive error handling and will continue operatin
 **User names show as tokens**
 - User information is only available for charging sessions with ID tokens
 - Some sessions may not include user identification
+- See "Known API Issues" below for more details on user token limitations
 
 ### Debug Logging
 
@@ -153,6 +154,44 @@ logger:
   logs:
     custom_components.garo_entity: debug
 ```
+
+## Known API Issues
+
+The Garo CSMS Cloud API has several known limitations and issues that affect the integration's functionality:
+
+### User Information Limitations
+
+**Issue**: Certain ID tokens cause 500 Internal Server Error when querying user information via the `GET /users` endpoint.
+
+**Impact**: 
+- Some transactions may display ID tokens instead of user names
+- User identification fails for specific token formats or users
+- No way to predict which tokens will cause errors
+
+**Workaround**: The integration falls back to displaying the raw ID token when user lookup fails, ensuring transaction data is still available.
+
+### Configuration Mutability Unknown
+
+**Issue**: The API returns `"mutability": null` for all configuration values, making it impossible to determine which settings can be modified.
+
+**Impact**:
+- No way to know programmatically which configuration values are read-only
+- Users may attempt to change immutable settings and receive rejection errors
+- Cannot provide appropriate UI hints about which settings are editable
+
+**Current Approach**: The integration exposes number entities for commonly changeable values (LightIntensity, MaxCurrent settings) based on empirical testing.
+
+### Configuration Endpoint Limitations
+
+**Issue**: The standard `PUT /charging-stations/{id}/configuration` endpoint does not reliably apply configuration changes.
+
+**Root Cause**: Configuration changes appear to require explicit commit/synchronization with the charging station that the standard endpoint doesn't trigger. The load balancer or backend service may not properly propagate changes.
+
+**Solution**: The integration uses `PUT /actions/change-configuration/{id}` instead, which properly handles the commit process and returns explicit "Accepted"/"Rejected" status responses.
+
+### API Rate Limiting
+
+**Note**: The integration uses a 15-minute polling interval to provide reasonable data freshness for EV charging scenarios.
 
 ## API Documentation
 
