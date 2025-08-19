@@ -120,19 +120,26 @@ async def async_setup_entry(
         # Create configuration sensors for each charging station
         configurations_data = coordinator.data.get("configurations", {})
         _LOGGER.debug("Setting up configuration sensors for %s stations", len(configurations_data))
+        _LOGGER.debug("Configuration data keys: %s", list(configurations_data.keys()))
         
         for station_id, station_data in configurations_data.items():
+            _LOGGER.debug("Processing configuration for station %s: %s", station_id, station_data)
             station_info = station_data.get("station_info", {})
             configuration = station_data.get("configuration", [])
             
+            _LOGGER.debug("Station %s configuration type: %s, length: %s", 
+                         station_id, type(configuration), len(configuration) if isinstance(configuration, (list, dict)) else "N/A")
+            
             if isinstance(configuration, list):
                 config_count = 0
-                for config_item in configuration:
+                for i, config_item in enumerate(configuration):
+                    _LOGGER.debug("Configuration item %s for station %s: %s", i, station_id, config_item)
                     key = config_item.get("key")
                     value = config_item.get("value")
                     
                     # Only create sensors for configs with non-empty values
                     if key and value is not None and str(value).strip():
+                        _LOGGER.debug("Creating configuration sensor for %s: %s=%s", station_id, key, value)
                         entities.append(
                             GaroEntityConfigurationSensor(
                                 coordinator,
@@ -143,9 +150,14 @@ async def async_setup_entry(
                             )
                         )
                         config_count += 1
+                    else:
+                        _LOGGER.debug("Skipping configuration %s for station %s (empty value): key=%s, value=%s", 
+                                    i, station_id, key, value)
                 
                 _LOGGER.debug("Created %s configuration sensors for station %s", 
                             config_count, station_info.get("name", station_id[:8]))
+            else:
+                _LOGGER.warning("Configuration for station %s is not a list: %s", station_id, type(configuration))
 
         # Create transaction sensors for each charging station
         transactions_data = coordinator.data.get("transactions", {})
@@ -853,6 +865,10 @@ class GaroEntityConfigurationSensor(CoordinatorEntity, SensorEntity):
             "ConnectionGroupMaster": "Connection Group Master",
             "ConnectionGroupMaxCurrent": "Max Current (Group)",
             "ConnectionGroupName": "Connection Group Name",
+            "ConnectionGroupDevices1": "Connection Group Device 1",
+            "ConnectionGroupDevices2": "Connection Group Device 2",
+            "ConnectionGroupDevices3": "Connection Group Device 3",
+            "ConnectionGroupDevices4": "Connection Group Device 4",
             "BracketMaxCurrent": "Max Current (Bracket)",
             "OwnerMaxCurrent": "Max Current (Owner)",
             "NetworkInterface": "Network Interface",

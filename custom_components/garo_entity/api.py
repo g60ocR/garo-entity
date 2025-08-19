@@ -372,8 +372,32 @@ class GaroEntityAPI:
         """Get configuration values for a specific charging station."""
         _LOGGER.debug("Getting configuration for charging station: %s", charging_station_id)
         try:
-            response = await self._request("GET", f"/charging-stations/{charging_station_id}/configuration")
-            _LOGGER.debug("Configuration response for %s: %s", charging_station_id, response)
+            # Define all configuration keys to retrieve
+            configuration_keys = [
+                "LightIntensity",
+                "GaroConnectionGroupDevices1",
+                "GaroConnectionGroupDevices2", 
+                "GaroConnectionGroupDevices3",
+                "GaroConnectionGroupDevices4",
+                "GaroConnectionGroupMaster",
+                "GaroConnectionGroupMaxCurrent",
+                "GaroConnectionGroupName",
+                "GaroBracketMaxCurrent",
+                "GaroOwnerMaxCurrent",
+                "GaroNetworkInterface",
+                "GaroModemApn",
+                "GaroModemPin",
+                "GaroTimeZone",
+                "GaroFreeChargeTag",
+                "GaroClockAlignedDataIntervalSpread"
+            ]
+            
+            data = {
+                "key": configuration_keys
+            }
+            
+            response = await self._request("PUT", f"/actions/get-configuration/{charging_station_id}", data=data)
+            _LOGGER.debug("Configuration response received for station %s", charging_station_id)
             return response
         except Exception as exc:
             _LOGGER.error("Failed to get configuration for station %s: %s", charging_station_id, exc)
@@ -392,10 +416,22 @@ class GaroEntityAPI:
                 station_name = station.get('name', station.get('uid', station_id))
                 
                 try:
-                    configuration = await self.get_charging_station_configuration(station_id)
+                    configuration_response = await self.get_charging_station_configuration(station_id)
+                    _LOGGER.debug("Raw configuration response for station %s: %s", station_name, configuration_response)
+                    
+                    # Extract configuration data from the response structure
+                    configuration_list = []
+                    if isinstance(configuration_response, dict) and 'configuration_key' in configuration_response:
+                        configuration_list = configuration_response['configuration_key']
+                        _LOGGER.debug("Extracted %s configuration items for station %s", 
+                                    len(configuration_list), station_name)
+                    else:
+                        _LOGGER.warning("Unexpected configuration response structure for station %s: %s", 
+                                      station_name, type(configuration_response))
+                    
                     all_configurations[station_id] = {
                         'station_info': station,
-                        'configuration': configuration
+                        'configuration': configuration_list
                     }
                     _LOGGER.debug("Got configuration for station %s (%s)", station_name, station_id)
                 except Exception as exc:
@@ -414,8 +450,17 @@ class GaroEntityAPI:
         """Set a configuration value for a specific charging station."""
         _LOGGER.info("Setting configuration %s=%s (%s) for charging station: %s", key, value, type(value).__name__, charging_station_id)
         try:
-            # Convert value to string as API expects
-            str_value = str(value).lower() if isinstance(value, bool) else str(value)
+            # Convert value to string as API expects with proper formatting
+            if isinstance(value, bool):
+                str_value = str(value).lower()
+            elif isinstance(value, float):
+                # Check if it's actually an integer value (e.g., 15.0 -> "15")
+                if value.is_integer():
+                    str_value = str(int(value))
+                else:
+                    str_value = str(value)
+            else:
+                str_value = str(value)
             
             data = {
                 "configuration_variables": [
@@ -428,7 +473,7 @@ class GaroEntityAPI:
             
             _LOGGER.debug("Sending PUT request to change-configuration endpoint")
             
-            response = await self._request("PUT", f"/actions/change-configuration/{charging_station_id}", data=data)
+            response = await self._request("PUT", f"/actions/change-configuration/{charging_station_id}?response_required=True", data=data)
             
             # Check if the configuration change was accepted
             if isinstance(response, dict) and "status" in response:
@@ -438,18 +483,26 @@ class GaroEntityAPI:
                     if config_status == "Accepted":
                         _LOGGER.info("Configuration update accepted for %s %s=%s", charging_station_id, key, str_value)
                     elif config_status == "Rejected":
-                        _LOGGER.error("Configuration update rejected for %s %s=%s", charging_station_id, key, str_value)
-                        raise Exception(f"Configuration change rejected by charging station: {key}={str_value}")
+                        _LOGGER.error("Configuration update rejected for %s %s=%s. Response: %s", charging_station_id, key, str_value, response)
+                        raise Exception(f"Configuration change rejected by charging station: {key}={str_value}. Response: {response}")
                     else:
-                        _LOGGER.warning("Unknown configuration status '%s' for %s %s=%s", config_status, charging_station_id, key, str_value)
+                        _LOGGER.warning("Unknown configuration status '%s' for %s %s=%s. Response: %s", config_status, charging_station_id, key, str_value, response)
                 else:
-                    _LOGGER.warning("Configuration key '%s' not found in response status for station %s", key, charging_station_id)
+                    _LOGGER.warning("Configuration key '%s' not found in response status for station %s. Response: %s", key, charging_station_id, response)
             else:
-                _LOGGER.warning("Unexpected response format for configuration change: missing 'status' field")
+                _LOGGER.warning("Unexpected response format for configuration change: missing 'status' field. Response: %s", response)
             
             return response
         except Exception as exc:
-            _LOGGER.error("Failed to set configuration %s=%s for station %s: %s", key, value, charging_station_id, exc)
+            # Try to capture response if it was set before the exception
+            response_info = ""
+            try:
+                if 'response' in locals():
+                    response_info = f" Response: {response}"
+            except:
+                pass
+            
+            _LOGGER.error("Failed to set configuration %s=%s for station %s: %s%s", key, value, charging_station_id, exc, response_info)
             raise
 
     async def get_transactions(self, charging_station_id: str, connector_id: int = 1) -> dict[str, Any]:
