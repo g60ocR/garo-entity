@@ -169,11 +169,12 @@ class GaroEntityConfigurationNumber(CoordinatorEntity, NumberEntity):
             await self.api.set_charging_station_configuration(
                 self.station_id,
                 self.config_key, 
-                api_value
+                api_value,
+                coordinator=self.coordinator
             )
             
-            # Request a refresh to update the sensor values
-            await self.coordinator.async_request_refresh()
+            # No need for full refresh since we update the configuration immediately
+            # await self.coordinator.async_request_refresh()
             
         except Exception as exc:
             _LOGGER.error("Failed to set %s to %s: %s", self.config_key, value, exc)

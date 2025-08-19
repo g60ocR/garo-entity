@@ -446,7 +446,7 @@ class GaroEntityAPI:
             _LOGGER.error("Failed to get all configurations: %s", exc)
             return {}
 
-    async def set_charging_station_configuration(self, charging_station_id: str, key: str, value: str | int | float | bool) -> dict[str, Any]:
+    async def set_charging_station_configuration(self, charging_station_id: str, key: str, value: str | int | float | bool, coordinator=None) -> dict[str, Any]:
         """Set a configuration value for a specific charging station."""
         _LOGGER.info("Setting configuration %s=%s (%s) for charging station: %s", key, value, type(value).__name__, charging_station_id)
         try:
@@ -482,6 +482,16 @@ class GaroEntityAPI:
                     config_status = status_info[key]
                     if config_status == "Accepted":
                         _LOGGER.info("Configuration update accepted for %s %s=%s", charging_station_id, key, str_value)
+                        
+                        # Update coordinator data immediately for instant feedback
+                        if coordinator:
+                            updated = self.update_configuration_in_coordinator(coordinator, charging_station_id, key, str_value)
+                            if updated:
+                                _LOGGER.debug("Immediately updated configuration sensor for %s %s=%s", charging_station_id, key, str_value)
+                                # Trigger entity state updates for configuration sensors
+                                coordinator.async_update_listeners()
+                            else:
+                                _LOGGER.warning("Failed to update coordinator data for %s %s=%s", charging_station_id, key, str_value)
                     elif config_status == "Rejected":
                         _LOGGER.error("Configuration update rejected for %s %s=%s. Response: %s", charging_station_id, key, str_value, response)
                         raise Exception(f"Configuration change rejected by charging station: {key}={str_value}. Response: {response}")
@@ -630,3 +640,44 @@ class GaroEntityAPI:
         
         _LOGGER.debug("Retrieved user info for %s out of %s tokens", len(all_user_info), len(id_tokens))
         return all_user_info
+
+    def update_configuration_in_coordinator(self, coordinator, charging_station_id: str, key: str, value: str) -> bool:
+        """Update a specific configuration value in the coordinator data immediately."""
+        try:
+            if not coordinator.data:
+                _LOGGER.warning("No coordinator data available to update configuration")
+                return False
+                
+            configurations_data = coordinator.data.get("configurations", {})
+            station_data = configurations_data.get(charging_station_id)
+            
+            if not station_data:
+                _LOGGER.warning("No configuration data found for station %s", charging_station_id)
+                return False
+                
+            configuration = station_data.get("configuration", [])
+            if not isinstance(configuration, list):
+                _LOGGER.warning("Configuration data is not a list for station %s", charging_station_id)
+                return False
+            
+            # Find and update the configuration item
+            updated = False
+            for config_item in configuration:
+                if config_item.get("key") == key:
+                    old_value = config_item.get("value")
+                    config_item["value"] = value
+                    config_item["status"] = "Accepted"  # Mark as accepted since API confirmed it
+                    _LOGGER.debug("Updated configuration %s for station %s: %s -> %s", 
+                                key, charging_station_id, old_value, value)
+                    updated = True
+                    break
+            
+            if not updated:
+                _LOGGER.warning("Configuration key %s not found in station %s data", key, charging_station_id)
+                return False
+                
+            return True
+            
+        except Exception as exc:
+            _LOGGER.error("Failed to update configuration in coordinator: %s", exc)
+            return False
